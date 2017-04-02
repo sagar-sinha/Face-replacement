@@ -1,0 +1,57 @@
+function  trackFaceWithFacePP(video_file)
+
+API_KEY = '6894a9492a127f5bc36e05763041a641';
+API_SECRET = 'itKp-UPlCBwd3T4zhkllnkpin4GfJfqp';
+api = facepp(API_KEY, API_SECRET);
+
+videoFileReader = vision.VideoFileReader(video_file);
+videoFrame      = step(videoFileReader);
+
+% tracking points for the replacement face
+[~,replacement, ~] = getLandmark(api,'ani.jpg',1);
+replacement_points = replacement(1:83,:);
+replacement_points_saved = replacement_points;
+
+% tracking points for the first video frame
+imwrite(videoFrame, fullfile('./', 'frame.jpg'));
+[~,target, ~] = getLandmark(api,'frame.jpg',1);
+target_points = target(1:83,:);
+
+% morph the first frame
+morph(videoFrame, target_points, replacement_points);
+
+%initialize a tracker with the target points
+pointTracker = vision.PointTracker('MaxBidirectionalError', 2);
+initialize(pointTracker, target_points, videoFrame);
+
+%initialize a video player to step through the video frames
+videoPlayer  = vision.VideoPlayer('Position',...
+    [100 100 [size(videoFrame, 2), size(videoFrame, 1)]+30]);
+count = 1;
+
+while ~isDone(videoFileReader)
+    videoFrame = step(videoFileReader);
+    [target_points, isFound] = step(pointTracker, videoFrame);
+    target_points = target_points(isFound, :);
+    replacement_points = replacement_points(isFound, :);
+    morph(videoFrame, target_points, replacement_points);
+    
+    count = count + 1;
+    step(videoPlayer, videoFrame);
+    %get the new target tracking points from FacePP & reinitialize the
+    %tracking points for the 
+    if(mod(count,24)==0)
+        replacement_points = replacement_points_saved;
+        imwrite(videoFrame, fullfile('./', 'frame.jpg'));
+        [~,target, ~] = getLandmark(api,'frame.jpg',1);
+        target_points = target(1:83,:);
+    end
+    setPoints(pointTracker, target_points);
+    
+end
+
+% Clean up
+release(videoFileReader);
+release(videoPlayer);
+release(pointTracker);
+end
